@@ -1,0 +1,14 @@
+{
+  "name": "tripgenie-backend",
+  "version": "1.0.0",
+  "description": "TripGenie Backend",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/index.js",
+    "install": "npm install --prefix server"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
