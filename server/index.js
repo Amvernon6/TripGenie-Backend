@@ -1,4 +1,15 @@
-require('dotenv').config({ path: './.env' });
+try {
+  require('dotenv').config({ path: './.env' });
+} catch (err) {
+  console.warn('Warning: Could not load .env file:', err.message);
+}
+
+try {
+  require('dotenv').config({ path: '../.env' });
+} catch (err) {
+  console.warn('Warning: Could not load ../.env file:', err.message);
+}
+
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
