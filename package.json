@@ -9,6 +9,6 @@
     "install": "npm install --prefix server"
   },
   "engines": {
-    "node": "18.x"
+    "node": "20.x"
   }
 }

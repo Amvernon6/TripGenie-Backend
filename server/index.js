@@ -29,6 +29,17 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Error handler for uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
 app.post('/api/image', async (req, res) => {
   const { city, country, state } = req.body;
   if (!city || !country) {
@@ -382,4 +393,5 @@ app.delete('/api/user/trips/:city/:country', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Environment variables: ${missingEnvVars.length === 0 ? 'All configured' : `Missing: ${missingEnvVars.join(', ')}`}`);
 });
