@@ -1,19 +1,33 @@
-require('dotenv').config({ path: './server/.env' });
+require('dotenv').config({ path: './.env' });
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const { createClient } = require('@supabase/supabase-js');
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
+// Validate required environment variables
+const requiredEnvVars = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'GEMINI_API_KEY', 'PIXABAY_API_KEY'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+let supabase;
+if (missingEnvVars.length === 0) {
+  supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY
+  );
+} else {
+  console.warn(`Missing environment variables: ${missingEnvVars.join(', ')}`);
+}
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 
 app.use(cors());
 app.use(express.json());
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
 
 app.post('/api/image', async (req, res) => {
   const { city, country, state } = req.body;
@@ -96,6 +110,9 @@ app.post('/api/gemini', async (req, res) => {
 
 app.post('/api/auth/signup', async (req, res) => {
   try {
+    if (!supabase) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -119,6 +136,9 @@ app.post('/api/auth/signup', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
+    if (!supabase) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -142,6 +162,9 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.post('/api/user/preferences', async (req, res) => {
   try {
+    if (!supabase) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing or invalid authorization header' });
@@ -191,6 +214,9 @@ app.post('/api/user/preferences', async (req, res) => {
 
 app.get('/api/user/preferences', async (req, res) => {
   try {
+    if (!supabase) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing or invalid authorization header' });
@@ -223,6 +249,9 @@ app.get('/api/user/preferences', async (req, res) => {
 
 app.post('/api/user/trips', async (req, res) => {
   try {
+    if (!supabase) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing or invalid authorization header' });
@@ -278,6 +307,9 @@ app.post('/api/user/trips', async (req, res) => {
 
 app.get('/api/user/trips', async (req, res) => {
   try {
+    if (!supabase) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing or invalid authorization header' });
@@ -303,6 +335,9 @@ app.get('/api/user/trips', async (req, res) => {
 
 app.delete('/api/user/trips/:city/:country', async (req, res) => {
   try {
+    if (!supabase) {
+      return res.status(503).json({ error: 'Supabase not configured' });
+    }
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing or invalid authorization header' });
