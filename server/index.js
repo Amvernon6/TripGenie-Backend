@@ -40,16 +40,16 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Error handler for uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-  // Don't exit - keep the app running
-});
+// Error handler for uncaught exceptions - temporarily removed for debugging
+// process.on('uncaughtException', (err) => {
+//   console.error('Uncaught Exception:', err);
+//   process.exit(1);
+// });
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  // Don't exit - keep the app running
-});
+// process.on('unhandledRejection', (reason, promise) => {
+//   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+//   process.exit(1);
+// });
 
 app.post('/api/image', async (req, res) => {
   const { city, country, state } = req.body;

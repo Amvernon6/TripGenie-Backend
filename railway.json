@@ -12,8 +12,6 @@
     "sleepApplication": false,
     "useLegacyStacker": false,
     "ipv6EgressEnabled": false,
-    "healthcheckPath": "/health",
-    "healthcheckTimeout": 30,
     "outboundNetworkEnabled": true,
     "multiRegionConfig": {
       "us-west2": {
