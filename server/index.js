@@ -1,55 +1,19 @@
-try {
-  require('dotenv').config({ path: './.env' });
-} catch (err) {
-  console.warn('Warning: Could not load .env file:', err.message);
-}
-
-try {
-  require('dotenv').config({ path: '../.env' });
-} catch (err) {
-  console.warn('Warning: Could not load ../.env file:', err.message);
-}
-
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const { createClient } = require('@supabase/supabase-js');
 
-// Validate required environment variables
-const requiredEnvVars = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'GEMINI_API_KEY', 'PIXABAY_API_KEY'];
-const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
-let supabase;
-if (missingEnvVars.length === 0) {
-  supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_KEY
-  );
-} else {
-  console.warn(`Missing environment variables: ${missingEnvVars.join(', ')}`);
-}
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 5001;
 
 app.use(cors());
 app.use(express.json());
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
-// Error handler for uncaught exceptions - temporarily removed for debugging
-// process.on('uncaughtException', (err) => {
-//   console.error('Uncaught Exception:', err);
-//   process.exit(1);
-// });
-
-// process.on('unhandledRejection', (reason, promise) => {
-//   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-//   process.exit(1);
-// });
 
 app.post('/api/image', async (req, res) => {
   const { city, country, state } = req.body;
@@ -122,7 +86,7 @@ app.post('/api/gemini', async (req, res) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    if (!response.ok) throw new Error('Gemini API error');
+    if (!response.ok) throw new Error('Gemini API error: ' + response.statusText);
     const data = await response.json();
     res.json(data);
   } catch (e) {
@@ -132,9 +96,6 @@ app.post('/api/gemini', async (req, res) => {
 
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    if (!supabase) {
-      return res.status(503).json({ error: 'Supabase not configured' });
-    }
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -158,9 +119,6 @@ app.post('/api/auth/signup', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
-    if (!supabase) {
-      return res.status(503).json({ error: 'Supabase not configured' });
-    }
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -184,9 +142,6 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.post('/api/user/preferences', async (req, res) => {
   try {
-    if (!supabase) {
-      return res.status(503).json({ error: 'Supabase not configured' });
-    }
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing or invalid authorization header' });
@@ -207,22 +162,19 @@ app.post('/api/user/preferences', async (req, res) => {
       return res.status(400).json({ error: 'Missing required preference fields' });
     }
 
-    // Save preferences to Supabase user_metadata or a separate preferences table
-    const { error: updateError } = await supabase.auth.updateUser(
-      {
-        data: {
-          preferences: {
-            budget,
-            travelStyle,
-            pace,
-            duration,
-            interests: interests || [],
-            accessibility: accessibility || []
-          }
+    // Save preferences to Supabase user_metadata using admin API
+    const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
+      user_metadata: {
+        preferences: {
+          budget,
+          travelStyle,
+          pace,
+          duration,
+          interests: interests || [],
+          accessibility: accessibility || []
         }
-      },
-      { token }
-    );
+      }
+    });
 
     if (updateError) {
       return res.status(400).json({ error: updateError.message });
@@ -236,9 +188,6 @@ app.post('/api/user/preferences', async (req, res) => {
 
 app.get('/api/user/preferences', async (req, res) => {
   try {
-    if (!supabase) {
-      return res.status(503).json({ error: 'Supabase not configured' });
-    }
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing or invalid authorization header' });
@@ -271,9 +220,6 @@ app.get('/api/user/preferences', async (req, res) => {
 
 app.post('/api/user/trips', async (req, res) => {
   try {
-    if (!supabase) {
-      return res.status(503).json({ error: 'Supabase not configured' });
-    }
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing or invalid authorization header' });
@@ -297,25 +243,26 @@ app.post('/api/user/trips', async (req, res) => {
     // Get existing trips from user metadata
     const existingTrips = user.user_metadata?.savedTrips || [];
     
-    // Check if trip already exists
-    const tripExists = existingTrips.some(trip => trip.city === tripData.city && trip.country === tripData.country);
+    // Check if trip already exists - if so, update it; otherwise add new trip
+    const tripIndex = existingTrips.findIndex(trip => trip.city === tripData.city && trip.country === tripData.country);
     
-    if (tripExists) {
-      return res.status(400).json({ error: 'Trip already saved' });
+    let updatedTrips;
+    if (tripIndex !== -1) {
+      // Update existing trip
+      updatedTrips = existingTrips.map((trip, idx) =>
+        idx === tripIndex ? { ...trip, ...tripData } : trip
+      );
+    } else {
+      // Add new trip
+      updatedTrips = [...existingTrips, tripData];
     }
 
-    // Add new trip
-    const updatedTrips = [...existingTrips, tripData];
-
-    // Save to Supabase user_metadata
-    const { error: updateError } = await supabase.auth.updateUser(
-      {
-        data: {
-          savedTrips: updatedTrips
-        }
-      },
-      { token }
-    );
+    // Save to Supabase user_metadata using admin API
+    const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
+      user_metadata: {
+        savedTrips: updatedTrips
+      }
+    });
 
     if (updateError) {
       return res.status(400).json({ error: updateError.message });
@@ -329,9 +276,6 @@ app.post('/api/user/trips', async (req, res) => {
 
 app.get('/api/user/trips', async (req, res) => {
   try {
-    if (!supabase) {
-      return res.status(503).json({ error: 'Supabase not configured' });
-    }
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing or invalid authorization header' });
@@ -357,9 +301,6 @@ app.get('/api/user/trips', async (req, res) => {
 
 app.delete('/api/user/trips/:city/:country', async (req, res) => {
   try {
-    if (!supabase) {
-      return res.status(503).json({ error: 'Supabase not configured' });
-    }
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Missing or invalid authorization header' });
@@ -382,15 +323,12 @@ app.delete('/api/user/trips/:city/:country', async (req, res) => {
     // Filter out the trip to delete
     const updatedTrips = existingTrips.filter(trip => !(trip.city === city && trip.country === country));
 
-    // Save to Supabase user_metadata
-    const { error: updateError } = await supabase.auth.updateUser(
-      {
-        data: {
-          savedTrips: updatedTrips
-        }
-      },
-      { token }
-    );
+    // Save to Supabase user_metadata using admin API
+    const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
+      user_metadata: {
+        savedTrips: updatedTrips
+      }
+    });
 
     if (updateError) {
       return res.status(400).json({ error: updateError.message });
@@ -402,7 +340,125 @@ app.delete('/api/user/trips/:city/:country', async (req, res) => {
   }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on 0.0.0.0:${PORT}`);
-  console.log(`Environment variables: ${missingEnvVars.length === 0 ? 'All configured' : `Missing: ${missingEnvVars.join(', ')}`}`);
+app.post('/api/user/itineraries', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing or invalid authorization header' });
+    }
+
+    const token = authHeader.substring(7);
+    
+    // Verify JWT token with Supabase
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    const itineraryData = req.body;
+
+    if (!itineraryData.city || !itineraryData.country) {
+      return res.status(400).json({ error: 'City and country are required' });
+    }
+
+    // Get existing itineraries from user metadata
+    const existingItineraries = user.user_metadata?.savedItineraries || [];
+    
+    // Add new itinerary
+    const updatedItineraries = [...existingItineraries, itineraryData];
+
+    // Save to Supabase user_metadata using admin API
+    const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
+      user_metadata: {
+        savedItineraries: updatedItineraries
+      }
+    });
+
+    if (updateError) {
+      return res.status(400).json({ error: updateError.message });
+    }
+
+    res.json({ success: true, message: 'Itinerary saved successfully', itinerary: itineraryData });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/user/itineraries', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing or invalid authorization header' });
+    }
+
+    const token = authHeader.substring(7);
+    
+    // Verify JWT token with Supabase
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    // Retrieve saved itineraries from user metadata
+    const savedItineraries = user.user_metadata?.savedItineraries || [];
+
+    res.json(savedItineraries);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/user/itineraries/:index', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing or invalid authorization header' });
+    }
+
+    const token = authHeader.substring(7);
+    
+    // Verify JWT token with Supabase
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    const index = parseInt(req.params.index, 10);
+
+    if (isNaN(index)) {
+      return res.status(400).json({ error: 'Invalid index' });
+    }
+
+    // Get existing itineraries from user metadata
+    const existingItineraries = user.user_metadata?.savedItineraries || [];
+    
+    if (index < 0 || index >= existingItineraries.length) {
+      return res.status(404).json({ error: 'Itinerary not found' });
+    }
+    
+    // Filter out the itinerary to delete
+    const updatedItineraries = existingItineraries.filter((_, i) => i !== index);
+
+    // Save to Supabase user_metadata using admin API
+    const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
+      user_metadata: {
+        savedItineraries: updatedItineraries
+      }
+    });
+
+    if (updateError) {
+      return res.status(400).json({ error: updateError.message });
+    }
+
+    res.json({ success: true, message: 'Itinerary removed successfully' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
