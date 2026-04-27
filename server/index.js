@@ -43,12 +43,12 @@ app.get('/health', (req, res) => {
 // Error handler for uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
-  process.exit(1);
+  // Don't exit - keep the app running
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exit(1);
+  // Don't exit - keep the app running
 });
 
 app.post('/api/image', async (req, res) => {
