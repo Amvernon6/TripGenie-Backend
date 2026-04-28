@@ -15,18 +15,6 @@ const PORT = process.env.PORT || 5001;
 app.use(cors());
 app.use(express.json());
 
-function buildResetPasswordRedirectUrl() {
-  const redirectBaseUrl = process.env.REDIRECT_URL;
-
-  console.log('[DEBUG] REDIRECT_URL env var:', redirectBaseUrl);
-
-  if (!redirectBaseUrl || redirectBaseUrl.trim() === '') {
-    return null;
-  }
-
-  return `${redirectBaseUrl.replace(/\/$/, '')}/profile/reset-password`;
-}
-
 app.post('/api/image', async (req, res) => {
   const { city, country, state } = req.body;
   if (!city || !country) {
@@ -123,7 +111,12 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    res.json({ user: data.user, session: data.session });
+    // Return only the access token (not the entire session) to keep it small
+    res.json({ 
+      user: data.user, 
+      access_token: data.session?.access_token,
+      refresh_token: data.session?.refresh_token
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -146,7 +139,12 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    res.json({ user: data.user, session: data.session });
+    // Return only the access token (not the entire session) to keep it small
+    res.json({ 
+      user: data.user, 
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -201,17 +199,9 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       return res.status(400).json({ error: 'Email is required' });
     }
 
-    const redirectTo = buildResetPasswordRedirectUrl();
-
-    if (!redirectTo) {
-      return res.status(500).json({
-        error: 'REDIRECT_URL is not configured. Add it to your Railway environment variables.'
-      });
-    }
-
     // Use Supabase's built-in password reset email
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo
+      redirectTo: `${process.env.REDIRECT_URL || 'http://localhost:5173'}/profile/reset-password`
     });
 
     if (error) {
