@@ -18,7 +18,9 @@ app.use(express.json());
 function buildResetPasswordRedirectUrl() {
   const redirectBaseUrl = process.env.REDIRECT_URL;
 
-  if (!redirectBaseUrl) {
+  console.log('[DEBUG] REDIRECT_URL env var:', redirectBaseUrl);
+
+  if (!redirectBaseUrl || redirectBaseUrl.trim() === '') {
     return null;
   }
 
