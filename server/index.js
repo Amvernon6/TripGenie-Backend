@@ -12,6 +12,14 @@ const supabase = createClient(
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// Log REDIRECT_URL configuration on startup
+const REDIRECT_URL = process.env.REDIRECT_URL || 'http://localhost:5173';
+if (!process.env.REDIRECT_URL) {
+  console.warn('⚠️  REDIRECT_URL environment variable is not set. Defaulting to: http://localhost:5173');
+} else {
+  console.log('✓ REDIRECT_URL configured:', REDIRECT_URL);
+}
+
 app.use(cors());
 app.use(express.json());
 
@@ -102,11 +110,14 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ error: 'Email and password required' });
     }
 
+    const emailRedirectUrl = `${REDIRECT_URL}/profile/login`;
+    console.log(`📧 Signup redirect URL for ${email}:`, emailRedirectUrl);
+    
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: `${process.env.REDIRECT_URL || 'http://localhost:5173'}/profile/login`
+        emailRedirectTo: emailRedirectUrl
       }
     });
 
@@ -220,8 +231,11 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     }
 
     // Use Supabase's built-in password reset email
+    const passwordResetUrl = `${REDIRECT_URL}/profile/reset-password`;
+    console.log(`🔐 Password reset URL for ${email}:`, passwordResetUrl);
+    
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.REDIRECT_URL || 'http://localhost:5173'}/profile/reset-password`
+      redirectTo: passwordResetUrl
     });
 
     if (error) {
