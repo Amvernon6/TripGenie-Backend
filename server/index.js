@@ -104,7 +104,10 @@ app.post('/api/auth/signup', async (req, res) => {
 
     const { data, error } = await supabase.auth.signUp({
       email,
-      password
+      password,
+      options: {
+        emailRedirectTo: `${process.env.REDIRECT_URL || 'http://localhost:5173'}/profile/login`
+      }
     });
 
     if (error) {
