@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const { createClient } = require('@supabase/supabase-js');
+const { v4: uuidv4 } = require('uuid');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -111,11 +112,20 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    // Return only the access token (not the entire session) to keep it small
+    // Ensure user data exists before accessing properties
+    if (!data.user) {
+      return res.status(500).json({ error: 'User creation failed' });
+    }
+
+    // Return only essential user fields and tokens to keep JWT small
+    // Note: For signup, session may be null if email verification is required
     res.json({ 
-      user: data.user, 
-      access_token: data.session?.access_token,
-      refresh_token: data.session?.refresh_token
+      user: {
+        id: data.user.id,
+        email: data.user.email
+      },
+      access_token: data.session?.access_token || null,
+      refresh_token: data.session?.refresh_token || null
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -139,9 +149,17 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    // Return only the access token (not the entire session) to keep it small
+    // Ensure user and session data exist before accessing properties
+    if (!data.user || !data.session) {
+      return res.status(500).json({ error: 'Login failed: incomplete session data' });
+    }
+
+    // Return only essential user fields and tokens to keep JWT small
     res.json({ 
-      user: data.user, 
+      user: {
+        id: data.user.id,
+        email: data.user.email
+      },
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token
     });
@@ -469,13 +487,19 @@ app.post('/api/user/itineraries', async (req, res) => {
       return res.status(400).json({ error: 'Itinerary title is required' });
     }
 
+    // Generate unique ID and add to itinerary data
+    const itineraryWithId = {
+      ...itineraryData,
+      id: uuidv4()
+    };
+
     // Insert itinerary into Supabase table
     const { data, error } = await supabase
       .from('user_itineraries')
       .insert({
         user_id: user.id,
         title: itineraryData.title,
-        itinerary_data: itineraryData,
+        itinerary_data: itineraryWithId,
         created_at: new Date().toISOString()
       })
       .select();
@@ -484,7 +508,13 @@ app.post('/api/user/itineraries', async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    res.json({ success: true, message: 'Itinerary saved successfully', itinerary: itineraryData });
+    // Return itinerary with database ID
+    const savedItinerary = data && data.length > 0 ? {
+      ...data[0].itinerary_data,
+      _id: data[0].id
+    } : itineraryWithId;
+
+    res.json({ success: true, message: 'Itinerary saved successfully', itinerary: savedItinerary });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -509,7 +539,7 @@ app.get('/api/user/itineraries', async (req, res) => {
     // Fetch saved itineraries from Supabase table
     const { data: itineraries, error } = await supabase
       .from('user_itineraries')
-      .select('itinerary_data')
+      .select('id, itinerary_data')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
@@ -517,8 +547,11 @@ app.get('/api/user/itineraries', async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
 
-    // Extract itinerary_data from each row
-    const savedItineraries = itineraries.map(row => row.itinerary_data);
+    // Map rows to include both the database ID and itinerary data
+    const savedItineraries = itineraries.map(row => ({
+      ...row.itinerary_data,
+      _id: row.id  // Add database ID for reference
+    }));
 
     res.json(savedItineraries);
   } catch (e) {
